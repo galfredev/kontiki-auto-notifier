@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: kontiki-auto-notifier
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: META_WABA_PHONE_ID
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PROVIDER
+        value: meta
