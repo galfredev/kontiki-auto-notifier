@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8">
+
+  <!-- MÉTRICAS -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="card p-6 rounded-2xl shadow-md">
+      <h2 class="text-lg font-semibold">Clientes</h2>
+      <p class="text-3xl font-bold mt-2">{{ total_clientes }}</p>
+    </div>
+    <div class="card p-6 rounded-2xl shadow-md">
+      <h2 class="text-lg font-semibold">Matafuegos</h2>
+      <p class="text-3xl font-bold mt-2">{{ total_matafuegos }}</p>
+    </div>
+    <div class="card p-6 rounded-2xl shadow-md">
+      <h2 class="text-lg font-semibold">Vencen en ≤ 30 días</h2>
+      <p class="text-3xl font-bold mt-2">{{ proximos }}</p>
+    </div>
+  </div>
+
+  <!-- IMPORTAR CLIENTES (REAL, HTMX) -->
+  <div class="card p-6 rounded-2xl shadow-md">
+    <h2 class="text-xl font-semibold mb-4">Importar clientes desde Excel/CSV</h2>
+
+    <form
+      hx-post="/import/excel"
+      hx-encoding="multipart/form-data"
+      hx-target="#import-result"
+      hx-swap="innerHTML"
+      class="flex flex-col sm:flex-row items-center gap-4"
+    >
+      <input type="file" name="file" accept=".csv,.xlsx" required
+             class="btn-ghost rounded-lg px-3 py-2 text-sm" />
+      <button type="submit" class="btn btn-primary rounded-lg px-6 py-2 text-sm font-medium">
+        Subir archivo
+      </button>
+    </form>
+
+    <div id="import-result" class="muted text-sm mt-3"></div>
+
+    <p class="muted text-xs mt-3">
+      <strong>Formato:</strong>
+      <code>nombre, teléfono(+54..), nro_serie, tipo, vencimiento(YYYY-MM-DD), [última_recarga], [empresa], [opt_in]</code>
+    </p>
+  </div>
+
+  <!-- ACCIONES RÁPIDAS -->
+  <div class="card p-6 rounded-2xl shadow-md">
+    <h2 class="text-xl font-semibold mb-4">Acciones rápidas</h2>
+    <button
+      class="btn btn-primary rounded-lg px-6 py-2 text-sm font-medium"
+      hx-post="/notifications/run-today"
+      hx-target="#run-result"
+      hx-swap="innerHTML">
+      Enviar avisos (HOY)
+    </button>
+    <div id="run-result" class="muted text-sm mt-2"></div>
+  </div>
+
+  <!-- PRÓXIMOS A VENCER -->
+  <div class="card p-6 rounded-2xl shadow-md">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+      <h2 class="text-xl font-semibold">🕒 Próximos a vencer</h2>
+      <div class="flex items-center gap-2">
+        <label class="muted">Rango</label>
+        <select
+          id="selRango"
+          class="btn-ghost rounded-lg px-3 py-2"
+          name="dias"
+          hx-get="/partials/upcoming"
+          hx-target="#upcoming">
+          <option value="7">7 días</option>
+          <option value="15">15 días</option>
+          <option value="30" selected>30 días</option>
+          <option value="60">60 días</option>
+        </select>
+        <button id="btnPDF" class="btn btn-primary rounded-lg px-4 py-2 text-sm">Descargar PDF</button>
+      </div>
+    </div>
+
+    <div id="upcoming"
+         class="text-sm muted"
+         hx-get="/partials/upcoming?dias=30"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+      Cargando…
+    </div>
+  </div>
+
+</div>
+
+<!-- PDF: respeta el rango seleccionado -->
+<script>
+  document.getElementById("btnPDF").addEventListener("click", () => {
+    const dias = document.getElementById("selRango").value || 30;
+    window.location.href = `/reports/vencimientos?dias=${dias}`;
+  });
+</script>
+{% endblock %}

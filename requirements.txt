@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+supabase
+psycopg2-binary
+python-dotenv
+pandas
+python-dateutil
+apscheduler
+requests
+twilio
+python-multipart
+apscheduler
+jinja2
+reportlab
+

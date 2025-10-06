@@ -1,0 +1,40 @@
+# venv
+.venv/
+# entorno
+.env
+# __pycache__
+__pycache__/
+# VSCode
+.vscode/
+# py cache
+*.pyc
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+.env.local
+.DS_Store
+
+# Logs & builds
+*.log
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+
+# Cache
+*.cache
+# Ignorar entorno virtual y configuraciones locales
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local

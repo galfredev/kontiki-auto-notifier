@@ -1,0 +1,30 @@
+{% if rows|length == 0 %}
+  <div class="text-sm muted">No hay vencimientos en el rango seleccionado.</div>
+{% else %}
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left border-b border-neutral-800">
+          <th class="py-2">Vence</th>
+          <th class="py-2">Cliente</th>
+          <th class="py-2">Teléfono</th>
+          <th class="py-2">Serie</th>
+          <th class="py-2">Tipo</th>
+          <th class="py-2">Empresa</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr class="border-b border-neutral-900">
+            <td class="py-2">{{ r.vencimiento[:10] }}</td>
+            <td class="py-2">{{ r.nombre }}</td>
+            <td class="py-2">{{ r.telefono }}</td>
+            <td class="py-2">{{ r.nro_serie }}</td>
+            <td class="py-2">{{ r.tipo }}</td>
+            <td class="py-2">{{ r.empresa or "-" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kon-Tiki | Notificaciones</title>
+
+    <!-- Tailwind -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+
+    <!-- Fuente y colores -->
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        background-color: #0e0e0e;
+        color: #eaeaea;
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      .card {
+        background-color: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        transition: all 0.2s ease;
+      }
+      .card:hover {
+        border-color: #ef4444;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+      }
+      .btn {
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      .btn-primary {
+        background-color: #ef4444;
+        color: white;
+      }
+      .btn-primary:hover {
+        background-color: #dc2626;
+      }
+      .btn-ghost {
+        background-color: #262626;
+        color: #eaeaea;
+      }
+      .btn-ghost:hover {
+        background-color: #333;
+      }
+      .muted {
+        color: #9ca3af;
+      }
+    </style>
+  </head>
+
+  <body class="min-h-screen flex flex-col">
+    <!-- NAV -->
+    <nav class="border-b border-neutral-800 bg-neutral-950 py-4">
+      <div class="max-w-7xl mx-auto flex items-center justify-between px-6">
+        <!-- Logo + título -->
+        <div class="flex items-center gap-3">
+          <img src="/static/kt-logo.png" alt="Kon-Tiki" class="w-8 h-8 rounded-full" />
+          <h1 class="text-lg font-semibold">
+            <span class="text-white">Kon-Tiki</span>
+            <span class="text-red-500 font-semibold">| Notificaciones</span>
+          </h1>
+        </div>
+
+        <!-- Menú derecho -->
+        <div>
+          <a href="/" class="text-sm text-neutral-400 hover:text-white">Panel</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- CONTENIDO -->
+    <main class="flex-grow p-6">
+      {% block content %}{% endblock %}
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-neutral-800 py-6 text-center text-xs text-neutral-500">
+      Kon-Tiki Notifier · v0.1 · Desarrollado por
+      <span class="text-red-500 font-medium">GalfreDev ⚡</span>
+    </footer>
+  </body>
+</html>
