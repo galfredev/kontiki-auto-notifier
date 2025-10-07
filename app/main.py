@@ -22,6 +22,9 @@ app.include_router(imports.router,        prefix="/import",         tags=["Impor
 app.include_router(testsend.router,       prefix="/testsend",       tags=["Tests"])
 
 attach_scheduler(app)
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 @app.get("/")
 def root_redirect():
