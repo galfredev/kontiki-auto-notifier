@@ -1,59 +1,52 @@
-# app/routers/notifications.py
-from fastapi import APIRouter
-from datetime import date, timedelta, datetime
+from fastapi import APIRouter, Header, HTTPException
+import os
+from datetime import date
 from app.db import get_supabase
-from app.utils.whatsapp import (
-    send_template_recordatorio,
-    send_template_ultimo_aviso,
-)
+from app.utils.whatsapp import send_whatsapp
 
 router = APIRouter()
-DIAS_AVISO = [30, 15, 7, 1, 0]
 
-def _fmt_ymd_to_dmy(ymd: str) -> str:
-    """Convierte 'YYYY-MM-DD' -> 'DD/MM/YYYY'."""
-    return datetime.strptime(ymd[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+CRON_SECRET = os.getenv("CRON_SECRET", "")
 
-def run_today_job():
-    sb = get_supabase()
-    hoy = date.today()
-    enviados: list[dict] = []
-
-    for d in DIAS_AVISO:
-        target = (hoy + timedelta(days=d)).isoformat()
-        res = sb.rpc("vencen_en_fecha", {"fecha_objetivo": target}).execute()
-        rows = res.data or []
-
-        for item in rows:
-            nombre = item["nombre"]
-            tel = item["telefono"]
-            serie = item["nro_serie"]
-            venc = _fmt_ymd_to_dmy(item["vencimiento"])
-
-            # Elegimos plantilla
-            if d == 0:
-                ok, error = send_template_ultimo_aviso(tel, nombre, serie, venc)
-                plantilla = "ultimo_aviso_es"
-            else:
-                ok, error = send_template_recordatorio(tel, nombre, serie, venc)
-                plantilla = "recordatorio_vencimiento_es"
-
-            # Registrar envío
-            sb.table("avisos").insert({
-                "matafuego_id": item["id_matafuego"],
-                "fecha_envio": hoy.isoformat(),
-                "plantilla": f"{plantilla} (D-{d})",
-                "estado": "sent" if ok else "error",
-                "error": error
-            }).execute()
-
-            enviados.append({
-                "tel": tel, "d": d, "ok": ok,
-                "plantilla": plantilla, "error": error
-            })
-
-    return {"hoy": hoy.isoformat(), "enviados": enviados}
+def _find_due_today(sb):
+    today = date.today().isoformat()
+    # extinguisher + client join (dos queries)
+    exts = sb.table("extinguishers").select("*").eq("vencimiento", today).execute().data
+    out = []
+    for e in exts:
+        c = sb.table("clients").select("*").eq("id", e["client_id"]).limit(1).execute().data
+        if c:
+            out.append({"ext": e, "client": c[0]})
+    return out
 
 @router.post("/run-today")
 def run_today():
-    return run_today_job()
+    sb = get_supabase()
+    items = _find_due_today(sb)
+    sent = 0; errors = 0
+    for it in items:
+        nombre = it["client"]["nombre"]
+        telefono = it["client"]["telefono"]
+        venc = it["ext"]["vencimiento"]
+        ok = send_whatsapp(telefono, nombre, venc)
+        if ok:
+            sent += 1
+            sb.table("avisos").insert({
+                "extinguisher_id": it["ext"]["id"],
+                "estado": "sent",
+                "detalle": {"to": telefono}
+            }).execute()
+        else:
+            errors += 1
+            sb.table("avisos").insert({
+                "extinguisher_id": it["ext"]["id"],
+                "estado": "error",
+                "detalle": {"to": telefono}
+            }).execute()
+    return {"sent": sent, "errors": errors}
+
+@router.post("/run-daily")
+def run_daily(x_cron_key: str = Header(None)):
+    if x_cron_key != CRON_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return run_today()

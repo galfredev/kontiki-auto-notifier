@@ -1,85 +1,90 @@
-# app/routers/imports.py
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, Form, Request
 from fastapi.responses import HTMLResponse
-import pandas as pd
-from io import BytesIO, StringIO
 from app.db import get_supabase
+from datetime import datetime
+import pandas as pd
+import re
 
 router = APIRouter()
+E164 = re.compile(r"^\+\d{8,15}$")
 
-REQUIRED = ["nombre", "telefono", "nro_serie", "tipo", "vencimiento"]
-ALL_COLS = REQUIRED + ["ultima_recarga", "empresa", "opt_in"]
-
-def _load_sheet(upload: UploadFile) -> pd.DataFrame:
-    content = upload.file.read()
-    if upload.filename.lower().endswith(".xlsx"):
-        df = pd.read_excel(BytesIO(content), sheet_name=None)
-        # usa "clientes" si existe, sino la primera hoja
-        if isinstance(df, dict):
-            df = df.get("clientes", list(df.values())[0])
-    elif upload.filename.lower().endswith(".csv"):
-        df = pd.read_csv(StringIO(content.decode("utf-8")))
-    else:
-        raise HTTPException(400, "Formato no soportado. Use .xlsx o .csv")
-    df.columns = [c.strip().lower() for c in df.columns]
-    return df
+def _to_date(x):
+    if not x or str(x).strip() == "":
+        return None
+    # acepta 'YYYY-MM-DD' o Excel serial
+    if isinstance(x, (int, float)):
+        # pandas ya convierte, pero por si llega serial crudo
+        return pd.to_datetime("1899-12-30") + pd.to_timedelta(int(x), unit="D")
+    return pd.to_datetime(str(x))
 
 @router.post("/excel", response_class=HTMLResponse)
-async def import_excel(file: UploadFile = File(...)):
-    try:
-        df = _load_sheet(file)
-    except Exception as e:
-        raise HTTPException(400, f"Error leyendo archivo: {e}")
-
-    # Validación de columnas
-    missing = [c for c in REQUIRED if c not in df.columns]
-    if missing:
-        raise HTTPException(400, f"Faltan columnas obligatorias: {', '.join(missing)}")
-
-    df = df[[c for c in ALL_COLS if c in df.columns]].copy()
-
-    # Limpieza y defaults
-    df["opt_in"] = df.get("opt_in", True).fillna(True).astype(bool)
-    df["empresa"] = df.get("empresa", "").fillna("")
-    df["ultima_recarga"] = df.get("ultima_recarga", "").fillna("")
-
-    # Drop filas completamente vacías en obligatorios
-    df = df.dropna(subset=["nombre","telefono","nro_serie","tipo","vencimiento"], how="any")
-
-    # Inserción en Supabase
+async def import_excel(request: Request, file: UploadFile):
     sb = get_supabase()
-    rows = df.to_dict(orient="records")
+    df = pd.read_excel(file.file) if file.filename.endswith(("xlsx","xls")) else pd.read_csv(file.file)
+
+    # normalizar columnas
+    df.columns = [c.strip().lower() for c in df.columns]
+    required = ["nombre","telefono","nro_serie","tipo","vencimiento"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        return HTMLResponse(f"<p style='color:#f88'>Faltan columnas: {', '.join(missing)}</p>")
+
+    processed = len(df)
     inserted = 0
-    errors = 0
-    for row in rows:
+    errores = []
+
+    for i, row in df.iterrows():
         try:
-            # upsert por nro_serie (ajustá la lógica a tus tablas reales)
-            sb.table("clientes").upsert({
-                "nombre": row["nombre"],
-                "telefono": row["telefono"],
-                "empresa": row.get("empresa",""),
-                "opt_in": row.get("opt_in", True),
-            }, on_conflict="telefono").execute()
+            nombre = str(row.get("nombre","")).strip()
+            telefono = str(row.get("telefono","")).strip()
+            nro_serie = str(row.get("nro_serie","")).strip()
+            tipo = str(row.get("tipo","")).strip()
+            empresa = str(row.get("empresa","")).strip() if "empresa" in df.columns else None
+            opt_in = bool(row.get("opt_in", True)) if "opt_in" in df.columns else True
 
-            # matafuegos
-            mf = {
-                "nro_serie": row["nro_serie"],
-                "tipo": row["tipo"],
-                "vencimiento": str(row["vencimiento"])[:10],
-                "ultima_recarga": str(row.get("ultima_recarga") or "")[:10] or None,
-                "telefono": row["telefono"],  # FK simple por ahora
-            }
-            sb.table("matafuegos").upsert(mf, on_conflict="nro_serie").execute()
+            if not E164.match(telefono):
+                raise ValueError(f"Teléfono no es E.164 (+549...): {telefono}")
+
+            venc = _to_date(row.get("vencimiento"))
+            if venc is None:
+                raise ValueError("Vencimiento vacío")
+            venc = pd.to_datetime(venc).strftime("%Y-%m-%d")
+
+            ultima = _to_date(row.get("ultima_recarga")) if "ultima_recarga" in df.columns else None
+            ultima = pd.to_datetime(ultima).strftime("%Y-%m-%d") if ultima else None
+
+            # upsert client por teléfono
+            c = sb.table("clients").upsert({
+                "nombre": nombre,
+                "telefono": telefono,
+                "empresa": empresa,
+                "opt_in": opt_in
+            }, on_conflict="telefono").execute().data
+
+            client_id = c[0]["id"] if c else sb.table("clients").select("id").eq("telefono",telefono).limit(1).execute().data[0]["id"]
+
+            # upsert extinguisher por nro_serie
+            sb.table("extinguishers").upsert({
+                "client_id": client_id,
+                "nro_serie": nro_serie,
+                "tipo": tipo,
+                "vencimiento": venc,
+                "ultima_recarga": ultima
+            }, on_conflict="nro_serie").execute()
+
             inserted += 1
-        except Exception:
-            errors += 1
 
-    html = f"""
-    <div class="text-sm">
-      <div><b>Importación completada</b></div>
-      <div>Registros procesados: {inserted + errors}</div>
-      <div><span style="color:#22c55e">✔</span> Insertados/actualizados: {inserted}</div>
-      <div><span style="color:#ef4444">✖</span> Errores: {errors}</div>
-    </div>
-    """
-    return HTMLResponse(html)
+        except Exception as e:
+            errores.append(f"Fila {i+2}: {e}")  # +2 por header + base 1
+
+    html = [
+        "<div style='margin-top:6px'>",
+        f"<b>Importación completada</b><br>",
+        f"✔ Registros procesados: {processed}<br>",
+        f"✔ Insertados/actualizados: {inserted}<br>",
+        f"✖ Errores: {len(errores)}<br>",
+    ]
+    if errores:
+        html.append("<ul>" + "".join([f"<li>{e}</li>" for e in errores]) + "</ul>")
+    html.append("</div>")
+    return HTMLResponse("".join(html))
